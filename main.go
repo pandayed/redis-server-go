@@ -36,6 +36,8 @@ func main() {
 
 	log.Printf("Redis server listening on %s", address)
 
+	storeInstance = newStore()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -68,6 +70,18 @@ func processCommand(command string) string {
 	switch parts[0] {
 	case "PING":
 		return "PONG"
+	case "ECHO":
+		return strings.Join(parts[1:], " ")
+	case "SET":
+		storeInstance.Set(parts[1], parts[2])
+		return "OK"
+
+	case "GET":
+		value, exists := storeInstance.Get(parts[1])
+		if !exists {
+			return ""
+		}
+		return value
 	default:
 		return "-ERR unknown command"
 	}
