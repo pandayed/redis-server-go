@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -68,10 +69,13 @@ func processCommand(command string) string {
 	}
 
 	switch parts[0] {
+
 	case "PING":
 		return "PONG"
+
 	case "ECHO":
 		return strings.Join(parts[1:], " ")
+
 	case "SET":
 		storeInstance.Set(parts[1], parts[2])
 		return "OK"
@@ -82,6 +86,35 @@ func processCommand(command string) string {
 			return ""
 		}
 		return value
+
+	case "INCR":
+		num, err := storeInstance.Incr(parts[1])
+		if err != nil {
+			return "-ERR invalid increment"
+		}
+		return strconv.Itoa(num)
+
+	case "DECR":
+		num, err := storeInstance.Decr(parts[1])
+		if err != nil {
+			return "-ERR invalid decrement"
+		}
+		return strconv.Itoa(num)
+
+	case "DEL":
+		deleted := storeInstance.Delete(parts[1])
+		if !deleted {
+			return "FALSE"
+		}
+		return "TRUE"
+
+	case "EXISTS":
+		exists := storeInstance.Exists(parts[1])
+		if !exists {
+			return "FALSE"
+		}
+		return "TRUE"
+
 	default:
 		return "-ERR unknown command"
 	}
