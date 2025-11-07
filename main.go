@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"log"
 	"net"
+	"strings"
 )
 
 // The flag package parses command-line arguments and converts them into Go variables. It's Go's built-in way to handle CLI options.
@@ -41,5 +43,33 @@ func main() {
 			continue
 		}
 		log.Printf("New connection from %s", conn.RemoteAddr())
+		go handleConnection(conn)
 	}
+}
+
+func handleConnection(conn net.Conn) {
+	scanner := bufio.NewScanner(conn)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		response := processCommand(line)
+		conn.Write([]byte(response + "\r\n"))
+	}
+
+}
+
+func processCommand(command string) string {
+	parts := strings.Split(command, " ")
+
+	if len(parts) == 0 {
+		return "-ERR empty command"
+	}
+
+	switch parts[0] {
+	case "PING":
+		return "PONG"
+	default:
+		return "-ERR unknown command"
+	}
+
 }
