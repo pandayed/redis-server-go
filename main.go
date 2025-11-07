@@ -10,6 +10,7 @@ import (
 )
 
 // The flag package parses command-line arguments and converts them into Go variables. It's Go's built-in way to handle CLI options.
+// The bufio package provides buffered I/O. It's useful for efficient reading and writing of data.
 
 func main() {
 
