@@ -7,10 +7,16 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // The flag package parses command-line arguments and converts them into Go variables. It's Go's built-in way to handle CLI options.
 // The bufio package provides buffered I/O. It's useful for efficient reading and writing of data.
+
+var (
+	connectionsCount int
+	connectionsMutex sync.Mutex
+)
 
 func main() {
 
@@ -46,20 +52,33 @@ func main() {
 			log.Printf("Failed to accept connection: %v", err)
 			continue
 		}
-		log.Printf("New connection from %s", conn.RemoteAddr())
+
 		go handleConnection(conn)
 	}
 }
 
 func handleConnection(conn net.Conn) {
-	scanner := bufio.NewScanner(conn)
 
+	connectionsMutex.Lock()
+	connectionsCount++
+	connectionsMutex.Unlock()
+
+	log.Printf("New connection from %s. Total connections: %d", conn.RemoteAddr(), connectionsCount)
+
+	defer func() {
+		conn.Close()
+		connectionsMutex.Lock()
+		connectionsCount--
+		connectionsMutex.Unlock()
+		log.Printf("Connection from %s closed. Total connections: %d", conn.RemoteAddr(), connectionsCount)
+	}()
+
+	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		line := scanner.Text()
 		response := processCommand(line)
 		conn.Write([]byte(response + "\r\n"))
 	}
-
 }
 
 func processCommand(command string) string {
