@@ -1,13 +1,26 @@
 package main
 
 import (
+	"strings"
 	"testing"
 )
+
+func executeTestCommand(command []string) []byte {
+	cmdUpper := make([]string, len(command))
+	for i, arg := range command {
+		if i == 0 {
+			cmdUpper[i] = strings.ToUpper(arg)
+		} else {
+			cmdUpper[i] = arg
+		}
+	}
+	return executeCommand(cmdUpper)
+}
 
 func TestProcessCommand_PING(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"PING"})
+	response := executeTestCommand([]string{"PING"})
 	expected := SerializeSimpleString("PONG")
 
 	if string(response) != string(expected) {
@@ -18,7 +31,7 @@ func TestProcessCommand_PING(t *testing.T) {
 func TestProcessCommand_PING_WithMessage(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"PING", "hello"})
+	response := executeTestCommand([]string{"PING", "hello"})
 	expected := SerializeBulkString("hello")
 
 	if string(response) != string(expected) {
@@ -29,7 +42,7 @@ func TestProcessCommand_PING_WithMessage(t *testing.T) {
 func TestProcessCommand_ECHO(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"ECHO", "hello world"})
+	response := executeTestCommand([]string{"ECHO", "hello world"})
 	expected := SerializeBulkString("hello world")
 
 	if string(response) != string(expected) {
@@ -40,14 +53,14 @@ func TestProcessCommand_ECHO(t *testing.T) {
 func TestProcessCommand_SET_GET(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"SET", "mykey", "myvalue"})
+	response := executeTestCommand([]string{"SET", "mykey", "myvalue"})
 	expected := SerializeSimpleString("OK")
 
 	if string(response) != string(expected) {
 		t.Errorf("Expected %q, got %q", expected, response)
 	}
 
-	response = processCommand([]string{"GET", "mykey"})
+	response = executeTestCommand([]string{"GET", "mykey"})
 	expected = SerializeBulkString("myvalue")
 
 	if string(response) != string(expected) {
@@ -58,7 +71,7 @@ func TestProcessCommand_SET_GET(t *testing.T) {
 func TestProcessCommand_GET_NonExistent(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"GET", "nonexistent"})
+	response := executeTestCommand([]string{"GET", "nonexistent"})
 	expected := SerializeNullBulkString()
 
 	if string(response) != string(expected) {
@@ -69,14 +82,14 @@ func TestProcessCommand_GET_NonExistent(t *testing.T) {
 func TestProcessCommand_INCR(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"INCR", "counter"})
+	response := executeTestCommand([]string{"INCR", "counter"})
 	expected := SerializeInteger(1)
 
 	if string(response) != string(expected) {
 		t.Errorf("Expected %q, got %q", expected, response)
 	}
 
-	response = processCommand([]string{"INCR", "counter"})
+	response = executeTestCommand([]string{"INCR", "counter"})
 	expected = SerializeInteger(2)
 
 	if string(response) != string(expected) {
@@ -87,7 +100,7 @@ func TestProcessCommand_INCR(t *testing.T) {
 func TestProcessCommand_DECR(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"DECR", "counter"})
+	response := executeTestCommand([]string{"DECR", "counter"})
 	expected := SerializeInteger(-1)
 
 	if string(response) != string(expected) {
@@ -100,14 +113,14 @@ func TestProcessCommand_DEL(t *testing.T) {
 
 	storeInstance.Set("key1", "value1")
 
-	response := processCommand([]string{"DEL", "key1"})
+	response := executeTestCommand([]string{"DEL", "key1"})
 	expected := SerializeInteger(1)
 
 	if string(response) != string(expected) {
 		t.Errorf("Expected %q, got %q", expected, response)
 	}
 
-	response = processCommand([]string{"DEL", "nonexistent"})
+	response = executeTestCommand([]string{"DEL", "nonexistent"})
 	expected = SerializeInteger(0)
 
 	if string(response) != string(expected) {
@@ -120,14 +133,14 @@ func TestProcessCommand_EXISTS(t *testing.T) {
 
 	storeInstance.Set("key1", "value1")
 
-	response := processCommand([]string{"EXISTS", "key1"})
+	response := executeTestCommand([]string{"EXISTS", "key1"})
 	expected := SerializeInteger(1)
 
 	if string(response) != string(expected) {
 		t.Errorf("Expected %q, got %q", expected, response)
 	}
 
-	response = processCommand([]string{"EXISTS", "nonexistent"})
+	response = executeTestCommand([]string{"EXISTS", "nonexistent"})
 	expected = SerializeInteger(0)
 
 	if string(response) != string(expected) {
@@ -138,14 +151,14 @@ func TestProcessCommand_EXISTS(t *testing.T) {
 func TestProcessCommand_CaseInsensitive(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"ping"})
+	response := executeTestCommand([]string{"ping"})
 	expected := SerializeSimpleString("PONG")
 
 	if string(response) != string(expected) {
 		t.Errorf("Expected %q, got %q", expected, response)
 	}
 
-	response = processCommand([]string{"PiNg"})
+	response = executeTestCommand([]string{"PiNg"})
 	expected = SerializeSimpleString("PONG")
 
 	if string(response) != string(expected) {
@@ -156,7 +169,7 @@ func TestProcessCommand_CaseInsensitive(t *testing.T) {
 func TestProcessCommand_UnknownCommand(t *testing.T) {
 	storeInstance = newStore()
 
-	response := processCommand([]string{"UNKNOWN"})
+	response := executeTestCommand([]string{"UNKNOWN"})
 	expected := SerializeError("ERR unknown command 'UNKNOWN'")
 
 	if string(response) != string(expected) {
