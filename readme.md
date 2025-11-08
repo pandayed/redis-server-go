@@ -1,131 +1,709 @@
-Commands to implement:
+# Redis Server in Go
 
-# Commands
+A Redis server implementation in Go with support for Strings, Lists, Sets, and Hashes.
 
-* **PING**
+## Features
 
-  * What it does: checks connection liveness between client and server.
-  * Typical reply: `PONG`.
-  * Use case: health check, latency measurement.
-  * Complexity: O(1).
-  * Notes: `PING <message>` echoes the message back.
+- RESP (Redis Serialization Protocol) compatible
+- Thread-safe operations
+- 25 Redis commands across 4 data types
+- Works with any Redis client (redis-cli, client libraries)
 
-* **ECHO**
+## Quick Start
 
-  * What it does: returns the given string.
-  * Example: `ECHO "hello"` → `"hello"`.
-  * Use case: test round-trip, measure latency, simple debugging.
-  * Complexity: O(1).
+### 1. Start the Server
 
-* **SET**
+```bash
+go run .
+```
 
-  * What it does: assign a value to a key (creates or overwrites).
-  * Syntax examples: `SET key value` ; `SET key value EX seconds` ; `SET key value PX milliseconds` ; `SET key value NX` (only set if key doesn't exist) ; `SET key value XX` (only set if key exists).
-  * Value types: stores a string (binary-safe). Other Redis types are separate (list, set, hash).
-  * Return: `"OK"` on success.
-  * Atomicity: single command is atomic.
-  * Complexity: O(1) for common cases (amortized).
-  * Notes: expiration options (EX/PX) set TTL; NX/XX are useful for locks & CAS patterns.
+The server will start on `localhost:6379`.
 
-* **GET**
+### 2. Connect with redis-cli
 
-  * What it does: retrieves the string value of a key.
-  * Example: `GET key` → `value` or `nil` if key missing.
-  * Error: type error if the key holds a non-string data type.
-  * Complexity: O(1).
-  * Notes: GET does not change TTL unless using special commands like `GETEX`.
+```bash
+redis-cli
+```
 
-* **EXISTS**
-
-  * What it does: checks whether a key (or keys) exist.
-  * Behavior:
-
-    * Older Redis versions returned `1` (exists) or `0` (does not).
-    * Modern Redis accepts multiple keys and returns the count of keys that exist (integer ≥ 0).
-  * Example: `EXISTS a b c` → `2` if two of them exist.
-  * Complexity: O(N) when called with N keys (checks each key); O(1) for a single key.
-  * Notes: useful for conditional flows; beware of race conditions in concurrent clients.
-
-* **DEL**
-
-  * What it does: deletes one or more keys.
-  * Return: number of keys actually removed (integer).
-  * Example: `DEL key1 key2` → `1` if only one existed and was removed.
-  * Complexity: O(N) with N = number of keys to delete (plus cost proportional to the size of data removed in some implementations).
-  * Notes: deleting many large keys can be costly; `UNLINK` is available in newer Redis to unlink asynchronously.
-
-* **INCR**
-
-  * What it does: increments the integer value stored at key by 1.
-  * Behavior:
-
-    * If key does not exist → key is set to `0` then incremented (result `1`).
-    * If key holds a string that represents an integer → increments and stores new value.
-    * If value is not an integer-like string → returns an error.
-  * Return: the new value (integer).
-  * Atomicity: atomic — safe under concurrency for counters.
-  * Complexity: O(1).
-  * Notes: use `INCRBY` to add arbitrary integer; use `INCRBYFLOAT` for floating increments.
-
-* **DECR**
-
-  * What it does: decrements the integer value stored at key by 1.
-  * Behavior: mirrors INCR (creates key with 0 then `-1` if missing).
-  * Return: the new value (integer).
-  * Atomicity: atomic.
-  * Complexity: O(1).
-  * Notes: use `DECRBY` for custom step.
-
-* **LPUSH**
-
-  * What it does: insert one or more values at the head (left) of a list stored at key.
-  * Behavior:
-
-    * If key does not exist → a new list is created.
-    * If key exists but is not a list → type error.
-  * Return: new length of the list (integer).
-  * Order: `LPUSH key a b c` results in list `c, b, a, ...` (last argument becomes head).
-  * Complexity: O(1) for each pushed element (amortized).
-  * Use cases: implement stacks (LIFO), queues (with `RPOP`), or producer-consumer patterns.
-
-* **RPUSH**
-
-  * What it does: insert one or more values at the tail (right) of a list.
-  * Behavior: same creation/type rules as LPUSH.
-  * Return: new list length.
-  * Order: `RPUSH key a b c` results in list `..., a, b, c` (pushes to tail).
-  * Complexity: O(1) per element (amortized).
-  * Use cases: implement FIFO queues (with `LPOP`) and append operations.
-
-* **SAVE**
-
-  * What it does: synchronously save the dataset to disk (create RDB snapshot).
-  * Behavior: blocks the server during the save operation until snapshot finishes.
-  * Return: `"OK"` on success.
-  * Complexity: depends on dataset size — can be expensive and causes pause.
-  * Notes:
-
-    * `BGSAVE` is the non-blocking alternative (forks a child to write snapshot).
-    * Modern deployments rely on `AOF` or periodic snapshots; `SAVE` is rarely used in production because it blocks clients.
-
-# Extra practical notes
-
-* **Type errors:** many commands will return a type error if the key exists but holds a different Redis data type.
-* **Atomicity:** single Redis commands are atomic; use transactions (`MULTI`/`EXEC`) or Lua scripts for multi-step atomic operations.
-* **Performance:** most basic commands are O(1); some commands scale with input size (check docs if doing bulk ops).
-* **Persistence:** `SET`, `INCR`, `LPUSH` and others change in-memory state; whether those changes survive a restart depends on your persistence settings (RDB snapshots, AOF).
-* **Concurrency:** `INCR`/`DECR` are safe for counters under concurrency because they are atomic.
-
-If you want, I can now:
-
-* give short concrete examples showing request → response for each command, or
-* show typical error cases and how to handle them (one command at a time). Which would you like?
-
+Or use any Redis client library in your preferred language.
 
 ---
 
+## Supported Commands (25 Total)
 
-Run: go run main.go
+### Connection Commands (2)
 
+#### PING
+Check if the server is alive.
 
-Connect using: telnet localhost 6379
+```bash
+127.0.0.1:6379> PING
+PONG
+
+127.0.0.1:6379> PING "hello"
+"hello"
+```
+
+- **Returns**: `PONG` or the message you send
+- **Complexity**: O(1)
+- **Use case**: Health checks, latency measurement
+
+#### ECHO
+Echo back the given string.
+
+```bash
+127.0.0.1:6379> ECHO "Hello, Redis!"
+"Hello, Redis!"
+```
+
+- **Returns**: The string you provided
+- **Complexity**: O(1)
+- **Use case**: Testing, debugging
+
+---
+
+### String Commands (6)
+
+Strings are simple key-value pairs.
+
+#### SET
+Set a string value.
+
+```bash
+127.0.0.1:6379> SET name "John Doe"
+OK
+
+127.0.0.1:6379> SET counter "0"
+OK
+```
+
+- **Syntax**: `SET key value`
+- **Returns**: `OK`
+- **Complexity**: O(1)
+- **Note**: Overwrites existing value
+
+#### GET
+Get a string value.
+
+```bash
+127.0.0.1:6379> GET name
+"John Doe"
+
+127.0.0.1:6379> GET nonexistent
+(nil)
+```
+
+- **Syntax**: `GET key`
+- **Returns**: Value or `nil` if key doesn't exist
+- **Complexity**: O(1)
+
+#### INCR
+Increment an integer value by 1.
+
+```bash
+127.0.0.1:6379> SET counter "10"
+OK
+
+127.0.0.1:6379> INCR counter
+(integer) 11
+
+127.0.0.1:6379> INCR counter
+(integer) 12
+
+127.0.0.1:6379> INCR newcounter
+(integer) 1
+```
+
+- **Syntax**: `INCR key`
+- **Returns**: New value after increment
+- **Complexity**: O(1)
+- **Note**: Creates key with value 0 if it doesn't exist, then increments to 1
+- **Error**: Returns error if value is not an integer
+
+#### DECR
+Decrement an integer value by 1.
+
+```bash
+127.0.0.1:6379> SET counter "10"
+OK
+
+127.0.0.1:6379> DECR counter
+(integer) 9
+
+127.0.0.1:6379> DECR counter
+(integer) 8
+
+127.0.0.1:6379> DECR newcounter
+(integer) -1
+```
+
+- **Syntax**: `DECR key`
+- **Returns**: New value after decrement
+- **Complexity**: O(1)
+- **Note**: Creates key with value 0 if it doesn't exist, then decrements to -1
+
+#### EXISTS
+Check if a key exists.
+
+```bash
+127.0.0.1:6379> SET name "John"
+OK
+
+127.0.0.1:6379> EXISTS name
+(integer) 1
+
+127.0.0.1:6379> EXISTS nonexistent
+(integer) 0
+```
+
+- **Syntax**: `EXISTS key`
+- **Returns**: `1` if exists, `0` if not
+- **Complexity**: O(1)
+- **Note**: Works for all data types (strings, lists, sets, hashes)
+
+#### DEL
+Delete a key.
+
+```bash
+127.0.0.1:6379> SET name "John"
+OK
+
+127.0.0.1:6379> DEL name
+(integer) 1
+
+127.0.0.1:6379> DEL name
+(integer) 0
+```
+
+- **Syntax**: `DEL key`
+- **Returns**: `1` if deleted, `0` if key didn't exist
+- **Complexity**: O(1)
+- **Note**: Works for all data types
+
+---
+
+### List Commands (6)
+
+Lists are ordered collections of strings. You can push/pop from both ends.
+
+```
+mylist: ["first", "second", "third"]
+         ↑                        ↑
+       LEFT                     RIGHT
+```
+
+#### LPUSH
+Push values to the left (head) of a list.
+
+```bash
+127.0.0.1:6379> LPUSH tasks "task3"
+(integer) 1
+
+127.0.0.1:6379> LPUSH tasks "task2" "task1"
+(integer) 3
+
+127.0.0.1:6379> LRANGE tasks 0 -1
+1) "task1"
+2) "task2"
+3) "task3"
+```
+
+- **Syntax**: `LPUSH key value [value ...]`
+- **Returns**: Length of list after push
+- **Complexity**: O(1) per element
+- **Note**: Last value becomes the head. `LPUSH key a b c` results in `[c, b, a]`
+
+#### RPUSH
+Push values to the right (tail) of a list.
+
+```bash
+127.0.0.1:6379> RPUSH tasks "task1" "task2" "task3"
+(integer) 3
+
+127.0.0.1:6379> LRANGE tasks 0 -1
+1) "task1"
+2) "task2"
+3) "task3"
+```
+
+- **Syntax**: `RPUSH key value [value ...]`
+- **Returns**: Length of list after push
+- **Complexity**: O(1) per element
+- **Use case**: Building queues (FIFO with LPOP)
+
+#### LPOP
+Pop a value from the left (head) of a list.
+
+```bash
+127.0.0.1:6379> RPUSH tasks "task1" "task2" "task3"
+(integer) 3
+
+127.0.0.1:6379> LPOP tasks
+"task1"
+
+127.0.0.1:6379> LPOP tasks
+"task2"
+
+127.0.0.1:6379> LPOP emptylist
+(nil)
+```
+
+- **Syntax**: `LPOP key`
+- **Returns**: The popped value or `nil` if list is empty
+- **Complexity**: O(1)
+- **Use case**: Queue processing (with RPUSH)
+
+#### RPOP
+Pop a value from the right (tail) of a list.
+
+```bash
+127.0.0.1:6379> RPUSH tasks "task1" "task2" "task3"
+(integer) 3
+
+127.0.0.1:6379> RPOP tasks
+"task3"
+
+127.0.0.1:6379> RPOP tasks
+"task2"
+```
+
+- **Syntax**: `RPOP key`
+- **Returns**: The popped value or `nil` if list is empty
+- **Complexity**: O(1)
+- **Use case**: Stack operations (LIFO with RPUSH)
+
+#### LRANGE
+Get a range of elements from a list.
+
+```bash
+127.0.0.1:6379> RPUSH mylist "a" "b" "c" "d" "e"
+(integer) 5
+
+127.0.0.1:6379> LRANGE mylist 0 2
+1) "a"
+2) "b"
+3) "c"
+
+127.0.0.1:6379> LRANGE mylist 0 -1
+1) "a"
+2) "b"
+3) "c"
+4) "d"
+5) "e"
+
+127.0.0.1:6379> LRANGE mylist -3 -1
+1) "c"
+2) "d"
+3) "e"
+```
+
+- **Syntax**: `LRANGE key start stop`
+- **Returns**: Array of elements
+- **Complexity**: O(S+N) where S is start offset and N is number of elements
+- **Note**: Indices are 0-based. Negative indices count from the end (-1 is last element)
+
+#### LLEN
+Get the length of a list.
+
+```bash
+127.0.0.1:6379> RPUSH mylist "a" "b" "c"
+(integer) 3
+
+127.0.0.1:6379> LLEN mylist
+(integer) 3
+
+127.0.0.1:6379> LLEN nonexistent
+(integer) 0
+```
+
+- **Syntax**: `LLEN key`
+- **Returns**: Length of list or 0 if key doesn't exist
+- **Complexity**: O(1)
+
+---
+
+### Set Commands (5)
+
+Sets are unordered collections of unique strings. No duplicates allowed!
+
+```
+myset: {"apple", "banana", "orange"}
+```
+
+#### SADD
+Add members to a set.
+
+```bash
+127.0.0.1:6379> SADD tags "redis" "golang" "tutorial"
+(integer) 3
+
+127.0.0.1:6379> SADD tags "redis"
+(integer) 0
+
+127.0.0.1:6379> SADD tags "database" "nosql"
+(integer) 2
+```
+
+- **Syntax**: `SADD key member [member ...]`
+- **Returns**: Number of members actually added (excludes duplicates)
+- **Complexity**: O(1) per member
+- **Note**: Automatically ignores duplicates
+
+#### SMEMBERS
+Get all members of a set.
+
+```bash
+127.0.0.1:6379> SADD tags "redis" "golang" "tutorial"
+(integer) 3
+
+127.0.0.1:6379> SMEMBERS tags
+1) "redis"
+2) "golang"
+3) "tutorial"
+
+127.0.0.1:6379> SMEMBERS nonexistent
+(empty array)
+```
+
+- **Syntax**: `SMEMBERS key`
+- **Returns**: Array of all members
+- **Complexity**: O(N) where N is set size
+- **Note**: Order is not guaranteed
+
+#### SISMEMBER
+Check if a member exists in a set.
+
+```bash
+127.0.0.1:6379> SADD tags "redis" "golang"
+(integer) 2
+
+127.0.0.1:6379> SISMEMBER tags "redis"
+(integer) 1
+
+127.0.0.1:6379> SISMEMBER tags "python"
+(integer) 0
+```
+
+- **Syntax**: `SISMEMBER key member`
+- **Returns**: `1` if member exists, `0` if not
+- **Complexity**: O(1)
+- **Use case**: Fast membership checks
+
+#### SREM
+Remove members from a set.
+
+```bash
+127.0.0.1:6379> SADD tags "redis" "golang" "tutorial"
+(integer) 3
+
+127.0.0.1:6379> SREM tags "tutorial"
+(integer) 1
+
+127.0.0.1:6379> SREM tags "python"
+(integer) 0
+
+127.0.0.1:6379> SMEMBERS tags
+1) "redis"
+2) "golang"
+```
+
+- **Syntax**: `SREM key member [member ...]`
+- **Returns**: Number of members actually removed
+- **Complexity**: O(1) per member
+
+#### SCARD
+Get the cardinality (size) of a set.
+
+```bash
+127.0.0.1:6379> SADD tags "redis" "golang" "tutorial"
+(integer) 3
+
+127.0.0.1:6379> SCARD tags
+(integer) 3
+
+127.0.0.1:6379> SCARD nonexistent
+(integer) 0
+```
+
+- **Syntax**: `SCARD key`
+- **Returns**: Number of members in the set
+- **Complexity**: O(1)
+
+---
+
+### Hash Commands (6)
+
+Hashes are maps of field-value pairs. Perfect for representing objects!
+
+```
+user:1000 → {
+  "name": "John",
+  "email": "john@example.com",
+  "age": "30"
+}
+```
+
+#### HSET
+Set a field in a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John Doe"
+(integer) 1
+
+127.0.0.1:6379> HSET user:1 email "john@example.com"
+(integer) 1
+
+127.0.0.1:6379> HSET user:1 name "Jane Doe"
+(integer) 0
+```
+
+- **Syntax**: `HSET key field value`
+- **Returns**: `1` if new field, `0` if field was updated
+- **Complexity**: O(1)
+
+#### HGET
+Get a field from a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John Doe"
+(integer) 1
+
+127.0.0.1:6379> HGET user:1 name
+"John Doe"
+
+127.0.0.1:6379> HGET user:1 age
+(nil)
+```
+
+- **Syntax**: `HGET key field`
+- **Returns**: Value of field or `nil` if field doesn't exist
+- **Complexity**: O(1)
+
+#### HGETALL
+Get all fields and values from a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John Doe"
+(integer) 1
+
+127.0.0.1:6379> HSET user:1 email "john@example.com"
+(integer) 1
+
+127.0.0.1:6379> HSET user:1 age "30"
+(integer) 1
+
+127.0.0.1:6379> HGETALL user:1
+1) "name"
+2) "John Doe"
+3) "email"
+4) "john@example.com"
+5) "age"
+6) "30"
+```
+
+- **Syntax**: `HGETALL key`
+- **Returns**: Flat array of [field1, value1, field2, value2, ...]
+- **Complexity**: O(N) where N is hash size
+- **Note**: Returns empty array if key doesn't exist
+
+#### HDEL
+Delete fields from a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John" email "john@example.com" age "30"
+(integer) 3
+
+127.0.0.1:6379> HDEL user:1 age
+(integer) 1
+
+127.0.0.1:6379> HDEL user:1 phone
+(integer) 0
+
+127.0.0.1:6379> HGETALL user:1
+1) "name"
+2) "John"
+3) "email"
+4) "john@example.com"
+```
+
+- **Syntax**: `HDEL key field [field ...]`
+- **Returns**: Number of fields actually deleted
+- **Complexity**: O(1) per field
+
+#### HEXISTS
+Check if a field exists in a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John"
+(integer) 1
+
+127.0.0.1:6379> HEXISTS user:1 name
+(integer) 1
+
+127.0.0.1:6379> HEXISTS user:1 age
+(integer) 0
+```
+
+- **Syntax**: `HEXISTS key field`
+- **Returns**: `1` if field exists, `0` if not
+- **Complexity**: O(1)
+
+#### HLEN
+Get the number of fields in a hash.
+
+```bash
+127.0.0.1:6379> HSET user:1 name "John" email "john@example.com"
+(integer) 2
+
+127.0.0.1:6379> HLEN user:1
+(integer) 2
+
+127.0.0.1:6379> HLEN nonexistent
+(integer) 0
+```
+
+- **Syntax**: `HLEN key`
+- **Returns**: Number of fields in the hash
+- **Complexity**: O(1)
+
+---
+
+## Real-World Examples
+
+### Example 1: Task Queue
+
+```bash
+RPUSH queue:tasks "process-payment-123"
+RPUSH queue:tasks "send-email-456"
+RPUSH queue:tasks "generate-report-789"
+
+LPOP queue:tasks
+
+LLEN queue:tasks
+```
+
+### Example 2: User Profile
+
+```bash
+HSET user:1000 name "Alice"
+HSET user:1000 email "alice@example.com"
+HSET user:1000 created_at "2025-01-01"
+
+HGET user:1000 email
+
+HGETALL user:1000
+```
+
+### Example 3: Tagging System
+
+```bash
+SADD post:1:tags "redis" "golang" "tutorial"
+SADD post:2:tags "redis" "python"
+
+SISMEMBER post:1:tags "golang"
+
+SMEMBERS post:1:tags
+```
+
+### Example 4: Page View Counter
+
+```bash
+INCR pageviews:home
+INCR pageviews:home
+INCR pageviews:home
+
+GET pageviews:home
+```
+
+### Example 5: Shopping Cart
+
+```bash
+RPUSH cart:user123 "product:laptop"
+RPUSH cart:user123 "product:mouse"
+RPUSH cart:user123 "product:keyboard"
+
+LRANGE cart:user123 0 -1
+
+HSET product:laptop name "MacBook Pro"
+HSET product:laptop price "2499"
+
+HGETALL product:laptop
+```
+
+---
+
+## Architecture
+
+### Data Storage
+
+```go
+type store struct {
+    strings map[string]string              
+    lists   map[string][]string            
+    sets    map[string]map[string]struct{} 
+    hashes  map[string]map[string]string   
+    mu      sync.RWMutex
+}
+```
+
+- **Strings**: Simple key-value map
+- **Lists**: Go slices for ordered collections
+- **Sets**: `map[string]struct{}` for O(1) lookups with zero memory overhead
+- **Hashes**: Nested maps for structured data
+- **Thread-safe**: All operations protected by RWMutex
+
+### RESP Protocol
+
+All communication uses the Redis Serialization Protocol (RESP):
+
+- **Simple Strings**: `+OK\r\n`
+- **Errors**: `-ERR message\r\n`
+- **Integers**: `:42\r\n`
+- **Bulk Strings**: `$5\r\nhello\r\n`
+- **Arrays**: `*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n`
+
+---
+
+## Testing
+
+Run the test suite:
+
+```bash
+go test -v
+```
+
+Run specific tests:
+
+```bash
+go test -v -run TestLists
+go test -v -run TestSets
+go test -v -run TestHashes
+```
+
+---
+
+## Implementation Notes
+
+### Memory Management
+- Empty data structures are automatically deleted to save memory
+- Keys are removed when their last element/field is deleted
+
+### Thread Safety
+- Read operations use `RLock()` for concurrent reads
+- Write operations use `Lock()` for exclusive access
+- All operations are atomic
+
+### Differences from Real Redis
+- No persistence (in-memory only)
+- No TTL/expiration
+- No pub/sub
+- No transactions (MULTI/EXEC)
+- No Lua scripting
+- No sorted sets
+- No set operations (SUNION, SINTER, SDIFF)
+
+---
+
+## License
+
+MIT
