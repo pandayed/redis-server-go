@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -73,70 +72,110 @@ func handleConnection(conn net.Conn) {
 		log.Printf("Connection from %s closed. Total connections: %d", conn.RemoteAddr(), connectionsCount)
 	}()
 
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		line := scanner.Text()
-		response := processCommand(line)
-		conn.Write([]byte(response + "\r\n"))
+	reader := bufio.NewReader(conn)
+
+	for {
+		value, err := ReadRESP(reader)
+		if err != nil {
+			if err.Error() == "EOF" {
+				return
+			}
+			log.Printf("Error reading RESP: %v", err)
+			return
+		}
+
+		command, err := value.ToCommand()
+		if err != nil {
+			response := SerializeError("ERR " + err.Error())
+			conn.Write(response)
+			continue
+		}
+
+		response := processCommand(command)
+		conn.Write(response)
 	}
 }
 
-func processCommand(command string) string {
-	parts := strings.Split(command, " ")
-
-	if len(parts) == 0 {
-		return "-ERR empty command"
+func processCommand(command []string) []byte {
+	if len(command) == 0 {
+		return SerializeError("ERR empty command")
 	}
 
-	switch parts[0] {
+	cmd := strings.ToUpper(command[0])
+
+	switch cmd {
 
 	case "PING":
-		return "PONG"
+		if len(command) == 1 {
+			return SerializeSimpleString("PONG")
+		}
+		return SerializeBulkString(command[1])
 
 	case "ECHO":
-		return strings.Join(parts[1:], " ")
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'echo' command")
+		}
+		return SerializeBulkString(command[1])
 
 	case "SET":
-		storeInstance.Set(parts[1], parts[2])
-		return "OK"
+		if len(command) < 3 {
+			return SerializeError("ERR wrong number of arguments for 'set' command")
+		}
+		storeInstance.Set(command[1], command[2])
+		return SerializeSimpleString("OK")
 
 	case "GET":
-		value, exists := storeInstance.Get(parts[1])
-		if !exists {
-			return ""
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'get' command")
 		}
-		return value
+		value, exists := storeInstance.Get(command[1])
+		if !exists {
+			return SerializeNullBulkString()
+		}
+		return SerializeBulkString(value)
 
 	case "INCR":
-		num, err := storeInstance.Incr(parts[1])
-		if err != nil {
-			return "-ERR invalid increment"
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'incr' command")
 		}
-		return strconv.Itoa(num)
+		num, err := storeInstance.Incr(command[1])
+		if err != nil {
+			return SerializeError("ERR value is not an integer or out of range")
+		}
+		return SerializeInteger(num)
 
 	case "DECR":
-		num, err := storeInstance.Decr(parts[1])
-		if err != nil {
-			return "-ERR invalid decrement"
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'decr' command")
 		}
-		return strconv.Itoa(num)
+		num, err := storeInstance.Decr(command[1])
+		if err != nil {
+			return SerializeError("ERR value is not an integer or out of range")
+		}
+		return SerializeInteger(num)
 
 	case "DEL":
-		deleted := storeInstance.Delete(parts[1])
-		if !deleted {
-			return "FALSE"
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'del' command")
 		}
-		return "TRUE"
+		deleted := storeInstance.Delete(command[1])
+		if deleted {
+			return SerializeInteger(1)
+		}
+		return SerializeInteger(0)
 
 	case "EXISTS":
-		exists := storeInstance.Exists(parts[1])
-		if !exists {
-			return "FALSE"
+		if len(command) < 2 {
+			return SerializeError("ERR wrong number of arguments for 'exists' command")
 		}
-		return "TRUE"
+		exists := storeInstance.Exists(command[1])
+		if exists {
+			return SerializeInteger(1)
+		}
+		return SerializeInteger(0)
 
 	default:
-		return "-ERR unknown command"
+		return SerializeError("ERR unknown command '" + cmd + "'")
 	}
 
 }
