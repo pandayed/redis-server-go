@@ -53,8 +53,6 @@ type DataStore interface {
 	HDel(key string, fields ...string) int
 	HExists(key, field string) bool
 	HLen(key string) int
-
-	Save() error
 }
 
 func newStore() DataStore {
@@ -446,9 +444,4 @@ func (s *store) HLen(key string) int {
 		return 0
 	}
 	return len(hash)
-}
-
-func (s *store) Save() error {
-	// TODO
-	return nil
 }
