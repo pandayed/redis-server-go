@@ -5,7 +5,7 @@ import "sync"
 // Grouped declaration; Common convention for package-level variables
 var (
 	storeInstance DataStore
-	once          sync.Once
+	once          sync.Once // lazily initialized singleton
 )
 
 func GetStore() DataStore {
