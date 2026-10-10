@@ -8,25 +8,6 @@ import (
 	"strconv"
 )
 
-type RESPType byte
-
-const (
-	SimpleString RESPType = '+'
-	Error        RESPType = '-'
-	Integer      RESPType = ':'
-	BulkString   RESPType = '$'
-	Array        RESPType = '*'
-)
-
-type RESPValue struct {
-	Type  RESPType
-	Str   string
-	Num   int
-	Bulk  string
-	Array []RESPValue
-	Null  bool
-}
-
 func ReadRESP(reader *bufio.Reader) (RESPValue, error) {
 	typeByte, err := reader.ReadByte()
 	if err != nil {
@@ -167,62 +148,4 @@ func readLine(reader *bufio.Reader) (string, error) {
 	}
 
 	return line[:len(line)-2], nil
-}
-
-func (v RESPValue) ToCommand() ([]string, error) {
-	if v.Type != Array {
-		return nil, errors.New("command must be an array")
-	}
-
-	if v.Null {
-		return nil, errors.New("command array is null")
-	}
-
-	command := make([]string, len(v.Array))
-	for i, elem := range v.Array {
-		if elem.Type == BulkString {
-			if elem.Null {
-				return nil, errors.New("command contains null bulk string")
-			}
-			command[i] = elem.Bulk
-		} else if elem.Type == SimpleString {
-			command[i] = elem.Str
-		} else {
-			return nil, fmt.Errorf("invalid command element type: %c", elem.Type)
-		}
-	}
-
-	return command, nil
-}
-
-func SerializeSimpleString(s string) []byte {
-	return []byte(fmt.Sprintf("+%s\r\n", s))
-}
-
-func SerializeError(msg string) []byte {
-	return []byte(fmt.Sprintf("-%s\r\n", msg))
-}
-
-func SerializeInteger(n int) []byte {
-	return []byte(fmt.Sprintf(":%d\r\n", n))
-}
-
-func SerializeBulkString(s string) []byte {
-	return []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(s), s))
-}
-
-func SerializeNullBulkString() []byte {
-	return []byte("$-1\r\n")
-}
-
-func SerializeArray(elements [][]byte) []byte {
-	result := []byte(fmt.Sprintf("*%d\r\n", len(elements)))
-	for _, elem := range elements {
-		result = append(result, elem...)
-	}
-	return result
-}
-
-func SerializeNullArray() []byte {
-	return []byte("*-1\r\n")
 }
