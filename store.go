@@ -1,62 +1,10 @@
 package main
 
-import "sync"
+import "github.com/pandayed/redis-server-go/store"
 
-// Grouped declaration; Common convention for package-level variables
-var (
-	storeInstance DataStore
-	once          sync.Once // lazily initialized singleton
-)
+var storeInstance store.DataStore
 
-func GetStore() DataStore {
-	once.Do(func() {
-		storeInstance = newStore()
-	})
-	return storeInstance
-}
-
-type store struct {
-	strings map[string]string
-	lists   map[string][]string
-	sets    map[string]map[string]struct{}
-	hashes  map[string]map[string]string
-	mu      sync.RWMutex
-}
-
-type DataStore interface {
-	Set(key, value string)
-	Get(key string) (string, bool)
-	Exists(key string) bool
-	Delete(key string) bool
-	Incr(key string) (int, error)
-	Decr(key string) (int, error)
-
-	LPush(key string, values ...string) int
-	RPush(key string, values ...string) int
-	LPop(key string) (string, bool)
-	RPop(key string) (string, bool)
-	LRange(key string, start, stop int) []string
-	LLen(key string) int
-
-	SAdd(key string, members ...string) int
-	SMembers(key string) []string
-	SIsMember(key string, member string) bool
-	SRem(key string, members ...string) int
-	SCard(key string) int
-
-	HSet(key, field, value string) int
-	HGet(key, field string) (string, bool)
-	HGetAll(key string) map[string]string
-	HDel(key string, fields ...string) int
-	HExists(key, field string) bool
-	HLen(key string) int
-}
-
-func newStore() DataStore {
-	return &store{
-		strings: make(map[string]string),
-		lists:   make(map[string][]string),
-		sets:    make(map[string]map[string]struct{}),
-		hashes:  make(map[string]map[string]string),
-	}
+// newStore preserves the constructor used by existing tests.
+func newStore() store.DataStore {
+	return store.New()
 }

@@ -1,4 +1,4 @@
-package main
+package store
 
 func (s *store) LPush(key string, values ...string) int {
 	s.mu.Lock()

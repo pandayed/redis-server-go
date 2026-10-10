@@ -1,4 +1,4 @@
-package main
+package store
 
 func (s *store) SAdd(key string, members ...string) int {
 	s.mu.Lock()

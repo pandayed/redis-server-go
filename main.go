@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"github.com/pandayed/redis-server-go/store"
 )
 
 func main() {
@@ -29,7 +31,7 @@ func main() {
 
 	log.Printf("Redis server listening on %s", address)
 
-	storeInstance = newStore()
+	storeInstance = store.New()
 	connManager := NewConnectionManager()
 
 	for {

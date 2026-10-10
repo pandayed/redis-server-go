@@ -1,4 +1,4 @@
-package main
+package store
 
 func (s *store) HSet(key, field, value string) int {
 	s.mu.Lock()

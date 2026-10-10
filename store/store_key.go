@@ -1,4 +1,4 @@
-package main
+package store
 
 func (s *store) Exists(key string) bool {
 	s.mu.RLock()
