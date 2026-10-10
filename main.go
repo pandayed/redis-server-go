@@ -7,6 +7,8 @@ import (
 	"net"
 	"strings"
 
+	"github.com/pandayed/redis-server-go/commands"
+	"github.com/pandayed/redis-server-go/resp"
 	"github.com/pandayed/redis-server-go/store"
 )
 
@@ -31,7 +33,8 @@ func main() {
 
 	log.Printf("Redis server listening on %s", address)
 
-	storeInstance = store.New()
+	dataStore := store.New()
+	executor := commands.New(dataStore)
 	connManager := NewConnectionManager()
 
 	for {
@@ -41,11 +44,11 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, connManager)
+		go handleConnection(conn, connManager, executor)
 	}
 }
 
-func handleConnection(conn net.Conn, connManager *ConnectionManager) {
+func handleConnection(conn net.Conn, connManager *ConnectionManager, executor *commands.Executor) {
 	connManager.Increment(conn.RemoteAddr())
 	defer func() {
 		conn.Close()
@@ -55,7 +58,7 @@ func handleConnection(conn net.Conn, connManager *ConnectionManager) {
 	reader := bufio.NewReader(conn)
 
 	for {
-		value, err := ReadRESP(reader)
+		value, err := resp.ReadRESP(reader)
 		if err != nil {
 			if err.Error() == "EOF" {
 				return
@@ -66,7 +69,7 @@ func handleConnection(conn net.Conn, connManager *ConnectionManager) {
 
 		command, err := value.ToCommand()
 		if err != nil {
-			response := SerializeError("ERR " + err.Error())
+			response := resp.SerializeError("ERR " + err.Error())
 			conn.Write(response)
 			continue
 		}
@@ -80,7 +83,7 @@ func handleConnection(conn net.Conn, connManager *ConnectionManager) {
 			}
 		}
 
-		response := executeCommand(cmdUpper)
+		response := executor.Execute(cmdUpper)
 		conn.Write(response)
 	}
 }

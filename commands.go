@@ -1,32 +1,8 @@
 package main
 
-type CommandHandler func([]string) []byte
+import "github.com/pandayed/redis-server-go/commands"
 
-var commandRegistry = make(map[string]CommandHandler)
-
-func registerCommand(name string, handler CommandHandler) {
-	commandRegistry[name] = handler
-}
-
-func init() {
-	registerConnectionCommands()
-	registerStringCommands()
-	registerListCommands()
-	registerSetCommands()
-	registerHashCommands()
-}
-
+// executeCommand preserves the entry point used by existing tests.
 func executeCommand(command []string) []byte {
-	if len(command) == 0 {
-		return SerializeError("ERR empty command")
-	}
-
-	cmdName := command[0]
-	handler, exists := commandRegistry[cmdName]
-	if !exists {
-		return SerializeError("ERR unknown command '" + cmdName + "'")
-	}
-
-	return handler(command)
+	return commands.New(storeInstance).Execute(command)
 }
-

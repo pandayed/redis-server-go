@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"fmt"
@@ -30,4 +30,3 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
-
